@@ -1,9 +1,14 @@
-# Personal fork: model pricing overrides and chat cost display
+# ADR: Personal fork: model pricing overrides and chat cost display
 
-Status: Accepted for this personal fork, 2026-10-28.
+- Status: Accepted
+- Date: 2026-10-28
+
+## Context
 
 The runtime already records native token costs and physical request identities,
 but the desktop does not expose their total or allow custom gateway rates.
+
+## Decision
 
 Add an optional `costOverride` to the existing provider-local ModelBinding JSON.
 Its input/output/cacheRead/cacheWrite fields are nonnegative USD per million
@@ -29,3 +34,9 @@ Native/remote hosts that do not supply the additive field show unavailable.
 
 This does not change the process model, pricing authority, usage identities,
 provider request shape, or the existing Bedrock cache-key compatibility fix.
+
+## Consequences
+
+The estimate reflects recorded request prices, rather than a provider invoice.
+Missing rates remain explicit, and price edits do not reprice historical bills.
+The optional fields preserve older providers and hosts without a migration.
