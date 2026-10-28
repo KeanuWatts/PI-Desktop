@@ -42,9 +42,9 @@ jobs:
       - name: Rust format check
         run: cargo fmt --check
       - name: Pricing persistence and session ledger tests
-        run: cargo test -p host-core --locked providers::
+        run: 'cargo test -p host-core --locked providers::'
       - name: Durable usage accounting regression
-        run: cargo test -p host-core --locked sessions::usage::
+        run: 'cargo test -p host-core --locked sessions::usage::'
       - name: Capture real HTTP gateway requests
         run: node scripts/e2e-bedrock-gateway.mjs
       - name: Build portable executable
