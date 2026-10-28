@@ -1,18 +1,25 @@
-import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Arch, Platform, build } from "electron-builder";
 
 const projectDir = fileURLToPath(new URL("../apps/desktop/", import.meta.url));
-const metadata = JSON.parse(await readFile(new URL("../apps/desktop/package.json", import.meta.url), "utf8"));
-
 // Use structured options: Windows shells can split dotted CLI overrides.
-await build({
+// Only pass overrides: builder merges these with package.json itself.
+const options = {
   projectDir,
   targets: Platform.WINDOWS.createTarget("portable", Arch.x64),
   publish: "never",
   config: {
-    ...metadata.build,
-    extraMetadata: { ...metadata.build.extraMetadata, piDistribution: "portable" },
-    portable: { ...metadata.build.portable, artifactName: "PI-Desktop-Bedrock-Portable-0.21.0.exe" },
+    extraMetadata: { piDistribution: "portable" },
+    portable: { artifactName: "PI-Desktop-Bedrock-Portable-0.21.0.exe" },
   },
-});
+};
+
+if (process.argv.includes("--check")) {
+  const { getConfig, validateConfiguration } = await import("app-builder-lib/out/util/config/config.js");
+  const { DebugLogger } = await import("builder-util");
+  const config = await getConfig(projectDir, null, options.config);
+  await validateConfiguration(config, new DebugLogger(false));
+  console.log("Portable packaging configuration is valid");
+} else {
+  await build(options);
+}

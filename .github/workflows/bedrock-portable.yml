@@ -21,7 +21,11 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - run: pnpm install --frozen-lockfile
+      - name: Validate portable packaging configuration
+        run: node scripts/build-bedrock-portable.mjs --check
       - run: pnpm build:js
       - run: pnpm --filter @pi-desktop/desktop typecheck
       - run: pnpm lint
