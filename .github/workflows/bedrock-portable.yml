@@ -35,7 +35,7 @@ jobs:
           pnpm run build:host-release
           pnpm run bundle:runtime
           pnpm exec electron-vite build
-          pnpm exec electron-builder --win portable --x64 --publish never -c.extraMetadata.piDistribution=portable -c.portable.artifactName=PI-Desktop-Bedrock-Portable-0.21.0.exe
+          node ../../scripts/build-bedrock-portable.mjs
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - name: Checksum
