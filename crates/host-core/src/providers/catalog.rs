@@ -83,6 +83,7 @@ pub(crate) fn normalize_model_bindings(bindings: &[ModelBinding]) -> Vec<ModelBi
                 available_for_subagents: binding.available_for_subagents,
                 native_web_search: binding.native_web_search,
                 fast_mode_allowed: binding.fast_mode_allowed,
+                cost_override: binding.cost_override.clone(),
             })
         })
         .collect()
@@ -108,6 +109,7 @@ fn legacy_model_binding(model_id: Option<String>) -> Vec<ModelBinding> {
                 available_for_subagents: None,
                 native_web_search: None,
                 fast_mode_allowed: None,
+                cost_override: None,
             }]
         })
         .unwrap_or_default()
@@ -530,6 +532,7 @@ mod tests {
             available_for_subagents: None,
             native_web_search: None,
             fast_mode_allowed: None,
+            cost_override: None,
         }
     }
 

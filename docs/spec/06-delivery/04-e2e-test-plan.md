@@ -19179,3 +19179,27 @@ Published provider and OpenCode requests must retain existing behavior.
 This supersedes the body-key expectations of the upstream custom endpoint
 scenario for this personal fork. The real company LiteLLM endpoint remains
 a manual acceptance check because its credentials are unavailable.
+
+### Personal fork: model price overrides and chat cost display
+
+1. Open a provider model's Advanced section. Enable Override model prices,
+   enter fractional USD/million rates, save, reopen, and restart. Verify all
+   four rates persist. Copy the provider and verify prices are retained.
+2. Disable the override to restore automatic pricing. Negative and nonfinite
+   prices must be rejected by the Host. Existing provider records load normally.
+3. Run Pi's native cost calculator with one million input tokens at $3/M,
+   100000 output at $15/M, 200000 cache reads at $0.30/M, and 10000 cache writes
+   at $3.75/M. Verify the request cost is $4.5975 and marked estimated.
+4. Verify actual provider-dialog editing/reset/save in isolated Chromium in
+   English and Chinese. Assert the composer shows a complete cost and a lower
+   bound when pricing is incomplete, and ignores a stale session response.
+5. Record a parent/child usage ledger, replay reports, reopen the database, and
+   request a one-message transcript page. Verify the session cost is unchanged.
+   Multiple turns must retain separate legacy totals and deduplicate operations.
+6. Missing pricing must show unavailable or partial; explicit free prices show
+   zero. A fork starts with no copied billed turns. Test UI reads flush queued
+   usage before returning the snapshot, and malformed legacy usage remains safe.
+
+Automated coverage: provider-api-style Electron fixture, session-cost display
+unit tests, runtime binding/native calculator tests, provider storage tests,
+and session usage ledger restart/pagination tests. No company or paid API calls.

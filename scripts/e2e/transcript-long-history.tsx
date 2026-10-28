@@ -125,7 +125,7 @@ export async function transcriptLongHistoryProbe() {
   const sessions = [history(100), history(1000), history(10784)];
   const records = new Map(sessions.map((item) => [item.summary.id, item]));
   const copied: string[] = [];
-  const reads: { id: string; limit?: number }[] = [];
+  const reads: { id: string; limit?: number; contentLimit?: number }[] = [];
   const errors: unknown[] = [];
   const latencies: number[] = [];
   const longTasks: number[] = [];
@@ -180,7 +180,7 @@ export async function transcriptLongHistoryProbe() {
     api.getSession = async (id, options) => {
       const item = records.get(id);
       assert(item, `unexpected session read ${id}`);
-      reads.push({ id, limit: options?.messageLimit });
+      reads.push({ id, limit: options?.messageLimit, contentLimit: options?.contentLimit });
       const messages = options?.messageLimit ? item.messages.slice(-options.messageLimit) : item.messages;
       return { session: { ...item.summary, messages,
         messageStart: item.messages.length - messages.length, hasMoreBefore: messages.length < item.messages.length } };
@@ -398,7 +398,8 @@ export async function transcriptLongHistoryProbe() {
     largest.messages = useAppStore.getState().messages;
     await select(sessions[0]); await select(largest);
     assert(host.querySelector('[data-message-id="appended-long-history-tool-2"]'), "switch lost appended tool");
-    assert(reads.every((read) => read.limit === 100), "ordinary selection requested unbounded Host history");
+    assert(reads.every((read) => read.limit === 100 || (read.limit === 1 && read.contentLimit === 1)),
+      "ordinary selection requested unbounded Host history (cost snapshots must be limited to one truncated message)");
     assert(errors.length === 0, `render errors: ${errors.map(String)}`);
     return { ok: true, workCounts, hostPageSize: 100, simultaneousRunningSessions: 3,
       diagnostics: { eventToSettledDomMs: latencies, longTasksMs: observer ? longTasks : null,

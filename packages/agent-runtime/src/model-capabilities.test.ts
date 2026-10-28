@@ -288,3 +288,27 @@ it("keeps native Pi null and absent extended mappings unavailable", () => {
   expect(configured.thinkingLevelMap?.xhigh).toBeNull();
   expect(configured.thinkingLevelMap?.max).toBeUndefined();
 });
+
+
+describe("explicit model token pricing", () => {
+  const binding = { contextWindow: 128000, maxTokens: 8192, thinkingLevels: [] };
+  it("replaces base rates and tiers with a user override without mutating catalog metadata", () => {
+    const original = { ...knownModel(), nativeCost: { input: 99, output: 99, cacheRead: 99, cacheWrite: 99 } };
+    const rates = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
+    const configured = modelConfigWithBinding(original, { ...binding, costOverride: rates });
+    expect(configured.nativeCost).toEqual(rates);
+    expect(configured.cost).toEqual(rates);
+    expect(original.nativeCost.input).toBe(99);
+  });
+  it("preserves automatic pricing when the override is removed and accepts free models", () => {
+    const original = { ...knownModel(), nativeCost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } };
+    expect(modelConfigWithBinding(original, binding).nativeCost).toEqual(original.nativeCost);
+    expect(modelConfigWithBinding(original, { ...binding, costOverride: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }).nativeCost?.input).toBe(0);
+  });
+  it("does not apply invalid negative or nonfinite rates", () => {
+    for (const input of [-1, NaN, Infinity]) {
+      const original = knownModel();
+      expect(modelConfigWithBinding(original, { ...binding, costOverride: { input, output: 1, cacheRead: 0, cacheWrite: 0 } }).nativeCost).toBeUndefined();
+    }
+  });
+});

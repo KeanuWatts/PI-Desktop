@@ -830,3 +830,21 @@ Set `PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true` before launching to restore
 upstream gateway cache-key behavior (needed by some Codex relays). No local
 configuration edit is needed for this fork to work with Bedrock. This fork
 policy supersedes the gateway body-key behavior described above.
+
+## Personal fork: explicit model prices
+
+Settings → Agent → Models → the configured model's Advanced section exposes
+**Override model prices**. Rates are USD per million input, output, cache-read,
+and cache-write tokens. Enabling it seeds rates from available catalog prices;
+otherwise the user must enter the appropriate prices. Zero is an explicit free
+rate, not a missing price. Disabling it restores automatic pricing. Overrides
+are provider/model specific, survive saving and restart, and are copied with
+provider configuration. Existing records without `costOverride` are unchanged.
+
+The central `modelConfigWithBinding` projection puts the explicit flat rates
+in both display and native runtime cost metadata, replacing tiered rates.
+Normal chat, delegates, and compaction use the same projection. Pi's native
+calculator converts USD/million rates into request costs. Costs are estimates;
+changing rates affects subsequent requests only, without rewriting history.
+
+See ADR `personal-model-pricing-and-chat-cost.md` for the additive contracts.

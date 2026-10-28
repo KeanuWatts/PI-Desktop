@@ -255,6 +255,12 @@ fn model_bindings_roundtrip_and_legacy_model_migrates_on_read() {
                     available_for_subagents: Some(true),
                     native_web_search: None,
                     fast_mode_allowed: Some(true),
+                    cost_override: Some(
+                        serde_json::from_value(
+                            json!({"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}),
+                        )
+                        .unwrap(),
+                    ),
                 },
                 ModelBinding {
                     id: "plain-model".into(),
@@ -272,6 +278,7 @@ fn model_bindings_roundtrip_and_legacy_model_migrates_on_read() {
                     available_for_subagents: None,
                     native_web_search: None,
                     fast_mode_allowed: None,
+                    cost_override: None,
                 },
             ]),
             default_model_id: None,
@@ -300,6 +307,12 @@ fn model_bindings_roundtrip_and_legacy_model_migrates_on_read() {
     assert_eq!(provider.models[0].available_for_subagents, Some(true));
     assert_eq!(provider.models[1].available_for_subagents, None);
     assert_eq!(provider.models[0].fast_mode_allowed, Some(true));
+    let restored = get_provider(&db, &secrets, &provider.id).unwrap().unwrap();
+    assert_eq!(
+        restored.models[0].cost_override,
+        provider.models[0].cost_override
+    );
+    assert!(restored.models[0].cost_override.is_some());
     assert_eq!(provider.models[1].fast_mode_allowed, None);
 
     let raw: String = db
@@ -387,6 +400,7 @@ fn binding_with_alias(id: &str, alias: Option<&str>) -> ModelBinding {
         available_for_subagents: None,
         native_web_search: None,
         fast_mode_allowed: None,
+        cost_override: None,
     }
 }
 
@@ -510,20 +524,20 @@ fn alias_survives_provider_create_and_update() {
 #[test]
 fn alias_length_is_limited_to_sixty_characters() {
     let at_limit = binding_with_alias("model", Some(&"a".repeat(MAX_MODEL_ALIAS_CHARS)));
-    assert!(validate_model_aliases(&[at_limit]).is_ok());
+    assert!(validate_model_bindings(&[at_limit]).is_ok());
 
     let over_limit = binding_with_alias("model", Some(&"a".repeat(MAX_MODEL_ALIAS_CHARS + 1)));
-    let error = validate_model_aliases(&[over_limit])
+    let error = validate_model_bindings(&[over_limit])
         .unwrap_err()
         .to_string();
     assert!(error.contains("MODEL_ALIAS_TOO_LONG"), "{error}");
 
     // Multi-byte aliases are counted in characters, not bytes.
     let multi_byte = binding_with_alias("model", Some(&"あ".repeat(MAX_MODEL_ALIAS_CHARS)));
-    assert!(validate_model_aliases(&[multi_byte]).is_ok());
+    assert!(validate_model_bindings(&[multi_byte]).is_ok());
     let multi_byte_over =
         binding_with_alias("model", Some(&"あ".repeat(MAX_MODEL_ALIAS_CHARS + 1)));
-    let error = validate_model_aliases(&[multi_byte_over])
+    let error = validate_model_bindings(&[multi_byte_over])
         .unwrap_err()
         .to_string();
     assert!(error.contains("MODEL_ALIAS_TOO_LONG"), "{error}");
@@ -1671,6 +1685,7 @@ fn binding_with_limits(id: &str, context_window: u32, max_tokens: u32) -> ModelB
         available_for_subagents: None,
         native_web_search: None,
         fast_mode_allowed: None,
+        cost_override: None,
     }
 }
 
@@ -2125,4 +2140,31 @@ fn reasoning_effort_override_survives_provider_create_update_and_read() {
             value
         );
     }
+}
+
+#[test]
+fn cost_override_survives_provider_storage_and_rejects_invalid_rates() {
+    let (dir, db, secrets) = test_context();
+    let mut model = binding_with_alias("gateway-model", None);
+    model.cost_override = Some(
+        serde_json::from_value(json!({"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}))
+            .unwrap(),
+    );
+    assert!(validate_model_bindings(&[model.clone()]).is_ok());
+    let raw = config_with_model_bindings("{}", &[model.clone()]).unwrap();
+    assert_eq!(
+        config_model_bindings(&raw, None, "provider")[0].cost_override,
+        model.cost_override
+    );
+    model.cost_override = Some(
+        serde_json::from_value(json!({"input":-1,"output":15,"cacheRead":0,"cacheWrite":0}))
+            .unwrap(),
+    );
+    assert!(validate_model_bindings(&[model])
+        .unwrap_err()
+        .to_string()
+        .contains("INVALID_MODEL_PRICING"));
+    drop(secrets);
+    drop(db);
+    std::fs::remove_dir_all(dir).unwrap();
 }

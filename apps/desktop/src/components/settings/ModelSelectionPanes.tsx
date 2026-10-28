@@ -37,6 +37,7 @@ import {
 import { api } from "../../lib/api";
 import { Button, Field, HelpIcon, Input, Tooltip, TooltipButton, cx } from "../ui";
 import { IconClose, IconGripVertical, IconHelp, IconPlus, IconRefresh, IconSearch } from "../icons";
+import { ModelPricingEditor } from "./ModelPricingEditor";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import { SettingsMenuSelect } from "./SettingsMenuSelect";
 import { filterChosenModels, hidesAddedBinding } from "./model-chosen-filter";
@@ -710,6 +711,8 @@ export function ModelSelectionPanes({
                     id={advancedId}
                     hidden={!expanded}
                   >
+                    <ModelPricingEditor value={binding.costOverride} catalog={info?.cost} disabled={busy}
+                      onChange={costOverride => updateBinding(binding.id, { costOverride })} />
                     <label className="provider-chosen-field">
                       <span className="provider-chosen-field-label">
                         {t("settings.modelAlias")}

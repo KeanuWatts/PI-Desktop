@@ -10,7 +10,7 @@ const options = {
   publish: "never",
   config: {
     extraMetadata: { piDistribution: "portable" },
-    portable: { artifactName: "PI-Desktop-Bedrock-Portable-0.21.0.exe" },
+    portable: { artifactName: "PI-Desktop-Bedrock-Portable-0.21.0-costs.1.exe" },
   },
 };
 

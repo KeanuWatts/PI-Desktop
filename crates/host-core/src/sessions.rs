@@ -290,6 +290,8 @@ pub struct SkillMention {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionDetail {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_cost: Option<Value>,
     #[serde(flatten)]
     pub summary: SessionSummary,
     pub messages: Vec<UiMessage>,
@@ -1681,6 +1683,7 @@ pub fn get_session_with_options(
         None => None,
     };
     Ok(Some(SessionDetail {
+        session_cost: usage::session_cost(db, id)?,
         summary,
         plan_history,
         navigation_parent,
@@ -1880,6 +1883,8 @@ pub fn fork_session_through(
     };
     let messages = records.into_iter().map(record_to_ui).collect();
     Ok(ForkSessionResult::Created(Box::new(SessionDetail {
+        // Forks do not copy billed turns from the source session.
+        session_cost: None,
         summary,
         plan_history: Vec::new(),
         navigation_parent: None,

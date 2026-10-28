@@ -53,3 +53,24 @@ test("session listing returns the current host-owned running IDs after its reads
   activeTurns.clear();
   assert.deepEqual(result.runningSessionIds, ["still-running"], "the result must be a detached snapshot");
 });
+
+
+test("session reads drain queued usage before returning the durable cost total", async () => {
+  const handlers = new Map();
+  const events = [];
+  const host = { call: async method => {
+    events.push(method);
+    assert.equal(method, "session.get");
+    return { session: { id: "cost-session", sessionCost: { knownCost: 1.25, unpricedRequests: 0 } } };
+  } };
+  loaded.exports.registerSessionIpc({
+    registrar: { handle: (channel, handler) => handlers.set(channel, handler) },
+    getHost: () => host, getSidecar: () => null,
+    persistenceOutbox: { flush: async getHost => { assert.equal(getHost(), host); events.push("flush"); } },
+    sessionCapabilityContext: async () => ({ providers: [], defaults: {} }),
+    enrichSession: session => session,
+  });
+  const result = await handlers.get(IPC.invoke.sessionGet)({ id: "cost-session", messageLimit: 1 });
+  assert.deepEqual(events, ["flush", "session.get"]);
+  assert.equal(result.session.sessionCost.knownCost, 1.25);
+});

@@ -31,6 +31,9 @@ import {
 } from "../lib/context-inspector-position";
 import { useSessionTiming } from "../features/chat/context-usage/useSessionTiming";
 
+import { useSessionCost } from "../features/chat/context-usage/useSessionCost";
+import { formatSessionCost } from "../lib/session-cost";
+
 const CONTEXT_RING_RADIUS = 9;
 const CONTEXT_RING_CIRCUMFERENCE = 2 * Math.PI * CONTEXT_RING_RADIUS;
 
@@ -80,6 +83,8 @@ export function ContextUsageInspector({
       ? state.runningSessions[state.activeSessionId] ?? state.isRunning
       : false,
   );
+  const sessionCost = useSessionCost(sessionId, sessionMessages, isSessionRunning);
+  const costLabel = t("chat.sessionCostLabel", { amount: formatSessionCost(sessionCost) });
   const modelRequestActivity = useAppStore((state) =>
     state.activeSessionId
       ? state.agentStatuses[state.activeSessionId]?.activity
@@ -336,6 +341,11 @@ export function ContextUsageInspector({
           {context.usedPercent}%
         </span>
       </div>
+      <div className="context-inspector-summary-row" title={t("chat.sessionCostHint")}>
+        <strong>{t("chat.sessionCostTitle")}</strong>
+        <span>{formatSessionCost(sessionCost)}</span>
+      </div>
+      {sessionCost?.unpricedRequests ? <p className="settings-help">{t("chat.sessionCostIncomplete", { count: sessionCost.unpricedRequests })}</p> : null}
       <div className="context-inspector-kpis">
         <div>
           <span>{t("chat.usageTurnTotal")}</span>
@@ -464,13 +474,14 @@ export function ContextUsageInspector({
         ref={triggerRef}
         type="button"
         className="context-inspector-trigger"
-        tooltip={t("chat.usageContextAria", ariaArguments)}
-        ariaLabel={t("chat.usageContextAria", ariaArguments)}
+        tooltip={`${t("chat.usageContextAria", ariaArguments)} · ${costLabel}`}
+        ariaLabel={`${t("chat.usageContextAria", ariaArguments)} · ${costLabel}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={toggleInspector}
       >
+        <span className="session-cost-value" title={t("chat.sessionCostHint")}>{formatSessionCost(sessionCost)}</span>
         <svg
           className="context-inspector-ring"
           viewBox="0 0 24 24"

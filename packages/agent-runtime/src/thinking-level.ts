@@ -49,7 +49,7 @@ export type ModelConfig = {
   modalities?: ModelModalities;
   openWeights?: boolean;
   limit?: ModelLimit;
-  /** Pi's native request pricing, including tiers; never reconstruct it from UI prices. */
+  /** Pi's native pricing (including tiers), or explicit user-supplied flat token rates. */
   nativeCost?: Model<Api>["cost"];
   cost?: ModelCost & {
     input: number;

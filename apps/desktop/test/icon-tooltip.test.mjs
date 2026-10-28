@@ -15,8 +15,11 @@ function assertLocalizedIconTooltip(relativePath, key) {
   const sharedAriaLabel = `ariaLabel={t("${key}"`;
   const title = `title={t("${key}"`;
   const sharedTooltip = `tooltip={t("${key}"`;
-  const ariaIndex = Math.max(contents.indexOf(ariaLabel), contents.indexOf(sharedAriaLabel));
-  const hoverIndex = Math.max(contents.indexOf(title), contents.indexOf(sharedTooltip));
+  // A tooltip can append a second localized fact (for example, chat cost).
+  const composedAriaLabel = 'ariaLabel={`${t("' + key + '"';
+  const composedTooltip = 'tooltip={`${t("' + key + '"';
+  const ariaIndex = Math.max(contents.indexOf(ariaLabel), contents.indexOf(sharedAriaLabel), contents.indexOf(composedAriaLabel));
+  const hoverIndex = Math.max(contents.indexOf(title), contents.indexOf(sharedTooltip), contents.indexOf(composedTooltip));
   assert.ok(ariaIndex >= 0, `${relativePath} should expose ${key} as an accessible name`);
   assert.ok(
     Math.abs(hoverIndex - ariaIndex) < 220,

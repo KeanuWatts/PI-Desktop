@@ -119,9 +119,21 @@ pub struct ProviderUpdateInput {
     pub enabled: Option<bool>,
 }
 
+/// USD per million tokens. JSON numbers retain Eq for provider configuration comparisons.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModelTokenPrices {
+    pub input: serde_json::Number,
+    pub output: serde_json::Number,
+    pub cache_read: serde_json::Number,
+    pub cache_write: serde_json::Number,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelBinding {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_override: Option<ModelTokenPrices>,
     pub id: String,
     /// Optional display alias. A blank or absent alias falls back to the catalog's
     /// published name; `id` remains the wire identity.
