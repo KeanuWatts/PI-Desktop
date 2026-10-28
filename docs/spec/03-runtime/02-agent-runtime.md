@@ -1931,3 +1931,11 @@ retries and images retain physical account/model attribution. Nested immediate
 parent and owning Task remain distinct. The migration does not add coding-agent
 AgentSession, Codemode or virtual routing. See the coding-agent design review for
 future adoption conditions.
+
+## Personal fork compatibility override
+
+For custom Chat Completions and Responses gateways, the personal Bedrock
+build removes `prompt_cache_key` at the session payload boundary, including
+compaction requests. Section 6.3 routing headers are unchanged. The body key
+is opt-in via `PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true`; see the provider
+model system specification for scope and compatibility consequences.

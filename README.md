@@ -1,3 +1,12 @@
+# Personal Bedrock-compatible portable build
+
+This fork omits `prompt_cache_key` for custom OpenAI-compatible gateways by
+default, avoiding LiteLLM/Bedrock unsupported-parameter errors without server
+changes. Download the Windows x64 portable EXE from this fork’s Releases;
+no installation or local build is needed. Native vendor and OpenCode paths
+retain upstream behavior. Gateways requiring this key can opt in by setting
+`PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true` before launch. The build is unsigned.
+
 <div align="center">
 
 <img src="docs/image/readme/logo.png" alt="PI-Desktop" width="108" />

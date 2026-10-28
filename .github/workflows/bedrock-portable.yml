@@ -1,0 +1,70 @@
+name: Bedrock portable Windows
+
+on:
+  push:
+    branches: [codex/disable-gateway-prompt-cache-key]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - run: pnpm install --frozen-lockfile
+      - name: Validate portable packaging configuration
+        run: node scripts/build-bedrock-portable.mjs --check
+      - run: pnpm build:js
+      - run: pnpm --filter @pi-desktop/desktop typecheck
+      - run: pnpm lint
+      - name: Gateway request regression tests
+        run: pnpm --filter @pi-desktop/agent-runtime exec vitest run src/session-affinity.test.ts src/compaction-request.test.ts src/runtime.test.ts
+      - name: Capture real HTTP gateway requests
+        run: node scripts/e2e-bedrock-gateway.mjs
+      - name: Build portable executable
+        working-directory: apps/desktop
+        run: |
+          pnpm run build:host-release
+          pnpm run bundle:runtime
+          pnpm exec electron-vite build
+          node ../../scripts/build-bedrock-portable.mjs
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $file = 'apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0.exe'
+          $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  PI-Desktop-Bedrock-Portable-0.21.0.exe" | Set-Content -LiteralPath "$file.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bedrock-portable-windows-x64
+          if-no-files-found: error
+          compression-level: 0
+          path: apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0.exe*
+      - name: Publish personal fork build
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: bedrock-portable-0.21.0
+          name: Pi Desktop 0.21.0 — Bedrock portable
+          prerelease: true
+          target_commitish: ${{ github.sha }}
+          body: |
+            Personal Windows x64 portable build. Download and run the EXE; no installer or local build is required.
+
+            Custom OpenAI-compatible gateways omit prompt_cache_key by default, including context summaries. Session routing headers remain enabled. Published vendor endpoints and OpenCode retain their existing behavior.
+
+            Gateways that require the key can opt back in with PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true before launching. This build is unsigned and has not been tested against the company's private LiteLLM server.
+          files: apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0.exe*

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { streamSimple as completionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
@@ -10,6 +10,9 @@ import {
   withSessionPromptCacheKey,
   type SessionAffinityProvider,
 } from "./session-affinity.js";
+
+beforeEach(() => vi.stubEnv("PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY", "true"));
+afterEach(() => vi.unstubAllEnvs());
 
 /** A row the user pointed at a self-hosted OpenAI-compatible gateway. */
 const ownGateway: SessionAffinityProvider = {
@@ -166,6 +169,31 @@ describe("sessionAffinityCompat", () => {
     expect(
       sessionAffinityCompat(openCodeGoRow, "openai-completions", GATEWAY),
     ).toBeUndefined();
+  });
+});
+
+describe("gateway cache key disabled by default in the personal fork", () => {
+  beforeEach(() => vi.stubEnv("PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY", undefined));
+
+  it.each(["openai-completions", "openai-responses"])("strips adapter and extension keys for %s without mutation", async (api) => {
+    const payload = { model: "bedrock-model", prompt_cache_key: "rejected", stream: true };
+    const options = withSessionAffinityOptions(
+      { onPayload: () => payload },
+      { provider: ownGateway, api, baseUrl: GATEWAY, sessionId: "session-7" },
+    );
+    const result = await options.onPayload?.({}, { ...completionsModel, api } as Model<"openai-completions">);
+    expect(result).toEqual({ model: "bedrock-model", stream: true });
+    expect(payload.prompt_cache_key).toBe("rejected");
+  });
+
+  it("does not add a key even when the session has an id", () => {
+    const payload = { model: "bedrock-model" };
+    expect(withSessionPromptCacheKey({ payload, api: "openai-completions", sessionId: "s", enabled: true })).toBe(payload);
+  });
+
+  it("preserves native provider payloads", () => {
+    const payload = { prompt_cache_key: "native-key" };
+    expect(withSessionPromptCacheKey({ payload, api: "openai-responses", sessionId: "s", enabled: false })).toBe(payload);
   });
 });
 
@@ -426,7 +454,8 @@ describe("withSessionAffinityOptions", () => {
  * key, and only the non-OpenRouter format does so.
  */
 describe("the pi-ai Completions adapter's session identity", () => {
-  it("sends the headers and body key §6.3 names, and no key on a published host", async () => {
+  it.each([undefined, "true"])("captures Completions gateway requests with cache-key opt-in %s", async (optIn) => {
+    vi.stubEnv("PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY", optIn);
     const sent: Array<{ headers: Headers; body: Record<string, unknown> }> = [];
     const fetchStub: typeof globalThis.fetch = async (_url, init) => {
       sent.push({
@@ -465,7 +494,7 @@ describe("the pi-ai Completions adapter's session identity", () => {
     expect(sent[0].headers.get("session_id")).toBe("session-42");
     expect(sent[0].headers.get("x-client-request-id")).toBe("session-42");
     expect(sent[0].headers.get("x-session-affinity")).toBe("session-42");
-    expect(sent[0].body.prompt_cache_key).toBe("session-42");
+    expect(sent[0].body.prompt_cache_key).toBe(optIn ? "session-42" : undefined);
 
     await streamOnce("https://api.deepseek.com/v1", ownGateway);
     expect(sent).toHaveLength(2);
@@ -530,7 +559,8 @@ describe("the pi-ai Anthropic adapter's session identity", () => {
 });
 
 describe("the pi-ai Responses adapter's proxy-safe session identity", () => {
-  it("sends x-session-affinity alongside its existing session headers", async () => {
+  it.each([undefined, "true"])("captures Responses gateway requests with cache-key opt-in %s", async (optIn) => {
+    vi.stubEnv("PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY", optIn);
     const model = {
       ...completionsModel,
       api: "openai-responses",
@@ -562,5 +592,6 @@ describe("the pi-ai Responses adapter's proxy-safe session identity", () => {
     expect(sent[0].headers.get("session_id")).toBe("session-42");
     expect(sent[0].headers.get("x-client-request-id")).toBe("session-42");
     expect(sent[0].headers.get("x-session-affinity")).toBe("session-42");
+    expect(sent[0].body.prompt_cache_key).toBe(optIn ? "session-42" : undefined);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantMessage, Api, Model, Models, ModelsSimpleStreamOptions } from "@earendil-works/pi-ai";
 import {
   OPENCODE_CLIENT_HEADER,
@@ -11,6 +11,9 @@ import {
   withCompactionRequestHeaders,
 } from "./compaction-request.js";
 import type { RuntimeProviderConfig } from "./provider-binding.js";
+
+beforeEach(() => vi.stubEnv("PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY", "true"));
+afterEach(() => vi.unstubAllEnvs());
 
 const provider: RuntimeProviderConfig = {
   id: "row-uuid",
@@ -348,4 +351,21 @@ describe("compaction summary conversation key", () => {
   expect(reports[0]).toMatchObject({ providerId: provider.id, modelId: model.id, totalTokens: 15, costStatus: "unknown" });
   expect((failed.usage as unknown as { desktopUsage?: { operationId?: string } }).desktopUsage?.operationId).toBe(reports[0]?.operationId);
   expect(completeSimple.mock.calls[0]?.[2]).toMatchObject({ sessionId: "summary-session", headers: { [OPENCODE_SESSION_HEADER]: "summary-session" } });
+});
+
+
+it.each(["openai-completions", "openai-responses"])("omits the gateway cache key from %s compaction by default", async (api) => {
+  vi.stubEnv("PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY", undefined);
+  const gatewayModel = { ...model, api, baseUrl: "https://gateway.example.com/v1" } as Model<Api>;
+  const gatewayProvider = { ...provider, vendorKey: "custom", apiStyle: "chat_completions", baseUrl: gatewayModel.baseUrl } as RuntimeProviderConfig;
+  const payload = { model: "bedrock", prompt_cache_key: "adapter-key", input: [] };
+  let captured: unknown;
+  const collection = { completeSimple: async (_model: unknown, _context: unknown, options: ModelsSimpleStreamOptions) => {
+    const replacement = await options.onPayload?.(payload, gatewayModel);
+    captured = replacement === undefined ? payload : replacement;
+    return "assistant-message";
+  } } as unknown as Models;
+  await withCompactionRequestHeaders(collection, gatewayProvider, "session-1").completeSimple(gatewayModel, context as never);
+  expect(captured).toEqual({ model: "bedrock", input: [] });
+  expect(payload.prompt_cache_key).toBe("adapter-key");
 });
