@@ -211,6 +211,8 @@ export type ContextWindowSource = ModelLimitSource;
 
 /** Provider-local model settings persisted with the provider configuration. */
 export type ModelBinding = {
+  /** Explicit USD per million token rates; absent follows native/catalog pricing. */
+  costOverride?: ModelTokenPrices;
   id: string;
   /** Optional display alias. When set it names the model everywhere the UI
    * shows a model label; the id remains the wire identity. */
@@ -262,6 +264,13 @@ export type ModelBinding = {
    * tier; only Responses wires carry it (`fastModeSupportedOn`).
    */
   fastModeAllowed?: boolean;
+};
+
+export type ModelTokenPrices = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
 };
 
 export const MODEL_MODALITIES = ["text", "image", "audio", "video", "pdf"] as const;

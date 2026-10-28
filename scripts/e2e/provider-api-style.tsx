@@ -12,6 +12,8 @@ import { subagentModelChoices } from "../../apps/desktop/src/components/settings
 import { API_STYLE_LABEL_KEYS, CUSTOM_PROVIDER_API_STYLES } from "../../apps/desktop/src/components/settings/provider-api-style";
 import { copyProviderConfiguration } from "../../apps/desktop/src/components/settings/provider-copy";
 import { CUSTOM_SERVICE } from "../../apps/desktop/src/components/settings/service-catalog";
+import { useAppStore } from "../../apps/desktop/src/stores/app-store";
+import { ContextUsageInspector } from "../../apps/desktop/src/components/ContextUsageInspector";
 import { api } from "../../apps/desktop/src/lib/api";
 
 declare global { var providerApiStyleProbe: (reasoningOnly?: boolean) => Promise<unknown>; }
@@ -509,11 +511,60 @@ globalThis.providerApiStyleProbe = async (reasoningOnly = false) => {
       click(searchCheckbox);
       await frame();
       assert(findWebSearch()?.checked, `${locale}: Codex web search opt-in did not update`);
+      click(control("settings.modelPricingOverride"));
+      await frame();
+      const priceField = (key: string) => document.querySelector<HTMLInputElement>(`input[aria-label="${i18n.t(key)}"]`);
+      assert(priceField("settings.modelPriceInput"), `${locale}: model price override fields missing`);
+      flushSync(() => setValue(priceField("settings.modelPriceInput")!, "3"));
+      flushSync(() => setValue(priceField("settings.modelPriceCacheRead")!, "0.3"));
+      await frame();
+      assert(priceField("settings.modelPriceCacheRead")?.value === "0.3", `${locale}: fractional cache price not retained`);
+      click(control("settings.modelPricingOverride"));
+      await frame();
+      assert(!priceField("settings.modelPriceInput"), `${locale}: automatic pricing reset did not hide overrides`);
+      click(control("settings.modelPricingOverride"));
+      await frame();
+      flushSync(() => setValue(priceField("settings.modelPriceInput")!, "3"));
+      flushSync(() => setValue(priceField("settings.modelPriceOutput")!, "15"));
+      await frame();
       click(control("settings.save"));
       await pause();
+      assert(savedCodexAccount?.models[0]?.costOverride?.input === 3, `${locale}: input price override was lost on save`);
+      assert(savedCodexAccount?.models[0]?.costOverride?.output === 15, `${locale}: output price override was lost on save`);
+      results.push(`${locale}:model-pricing-edit-reset-and-save`);
       assert(savedCodexAccount?.models[0]?.nativeWebSearch === true, `${locale}: Codex web search opt-in was not saved`);
       results.push(`${locale}:codex-native-search-opt-in`);
     }
+    await i18n.changeLanguage("en");
+    const usage = { inputTokens: 1000, outputTokens: 100, totalTokens: 1100 };
+    const costSession = (id: string) => ({ id, title: id, messageCount: 1, mode: "agent" as const,
+      thinkingLevel: "off" as const, permissionMode: "inherit" as const,
+      createdAt: "2026-10-28T00:00:00Z", updatedAt: "2026-10-28T00:01:00Z" });
+    let resolveOld: ((value: Awaited<ReturnType<typeof api.getSession>>) => void) | undefined;
+    api.getSession = async id => {
+      if (id === "cost-old") return new Promise(resolve => { resolveOld = resolve; });
+      return { session: { ...costSession(id), messages: [],
+        sessionCost: { knownCost: id === "cost-partial" ? 2 : 1.25, unpricedRequests: id === "cost-partial" ? 1 : 0 } } };
+    };
+    const selectCostSession = (id: string) => flushSync(() => useAppStore.setState({
+      activeSessionId: id, sessions: [costSession(id)], messages: [], runningSessions: {}, isRunning: false,
+    }));
+    selectCostSession("cost-complete");
+    flushSync(() => root.render(<I18nextProvider i18n={i18n}><ContextUsageInspector usage={usage} turnUsage={usage} contextWindow={128000} tools={[]} /></I18nextProvider>));
+    await frame();
+    assert(document.querySelector(".session-cost-value")?.textContent === "≈$1.2500", "thread cost was not displayed");
+    selectCostSession("cost-partial");
+    await frame();
+    assert(document.querySelector(".session-cost-value")?.textContent === "≥$2.0000", "partially priced cost was shown as complete");
+    selectCostSession("cost-old");
+    await frame();
+    assert(resolveOld, "old session cost read did not start");
+    selectCostSession("cost-complete");
+    await frame();
+    resolveOld!({ session: { ...costSession("cost-old"), messages: [], sessionCost: { knownCost: 99, unpricedRequests: 0 } } });
+    await frame();
+    assert(document.querySelector(".session-cost-value")?.textContent === "≈$1.2500", "stale cost response leaked across sessions");
+    results.push("thread-cost-visible-partial-and-stale-session-response");
     return { ok: true, scenarios: results, creates: creates.length, updates: updates.length,
       apiBoundary: "stubbed", hostPersistence: "not exercised", liveModel: "not exercised" };
   } finally { flushSync(() => root.unmount()); host.remove(); }

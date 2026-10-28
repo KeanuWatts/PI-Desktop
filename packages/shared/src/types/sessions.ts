@@ -85,6 +85,8 @@ export type SessionSummary = {
 };
 
 export type SessionDetail = SessionSummary & {
+  /** All durable billed turns, independent of transcript pagination. */
+  sessionCost?: SessionCostSummary;
   messages: UiMessage[];
   /** Authoritative metadata scoped to the submitted contracts in this page. */
   planHistory?: PlanHistoryEntry[];
@@ -103,6 +105,11 @@ export type SessionDetail = SessionSummary & {
   /** Every durable checkpoint, oldest first: the transcript shows one row per
    * compaction, the way Codex emits one `ContextCompaction` turn item each. */
   compactions?: ContextCompactionRecord[];
+};
+
+export type SessionCostSummary = {
+  knownCost: number;
+  unpricedRequests: number;
 };
 
 /**

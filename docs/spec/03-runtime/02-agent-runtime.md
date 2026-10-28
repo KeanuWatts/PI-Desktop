@@ -1939,3 +1939,18 @@ build removes `prompt_cache_key` at the session payload boundary, including
 compaction requests. Section 6.3 routing headers are unchanged. The body key
 is opt-in via `PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true`; see the provider
 model system specification for scope and compatibility consequences.
+
+## Personal fork: chat cost totals
+
+SessionDetail may include `sessionCost: { knownCost, unpricedRequests }`.
+Host-core reads all durable turn usage ledgers and deduplicates physical
+operation IDs, preserving independent legacy aggregates. Transcript pages,
+context compaction, and replay cannot reset or double-count known costs.
+Retries, child calls, and summary requests participate through the existing
+ledger. Forks do not inherit the source session's paid turn ledger.
+
+Known USD costs are summed. Unpriced records remain visible as incomplete
+pricing; they never become zero-dollar requests. A partial total is a lower
+bound, a wholly unknown total is unavailable, and explicitly free rates are
+shown as zero. Existing/native/remote hosts without this field remain valid.
+The composer shows the estimate beside the context ring and in its inspector.

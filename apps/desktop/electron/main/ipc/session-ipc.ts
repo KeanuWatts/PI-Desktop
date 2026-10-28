@@ -338,6 +338,8 @@ export function registerSessionIpc({
         if (!sidecar) throw new Error("sidecar unavailable");
         return sidecar.call("native.session.get", { id, ...request });
       }
+      // Cost totals and transcript reads must observe queued usage writes.
+      await persistenceOutbox.flush(getHost);
       const [result, { providers, defaults }] = await Promise.all([
         host.call<{ session?: RuntimeSession | null }>("session.get", {
           id,

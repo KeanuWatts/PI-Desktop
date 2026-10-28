@@ -2,7 +2,7 @@ name: Bedrock portable Windows
 
 on:
   push:
-    branches: [codex/disable-gateway-prompt-cache-key]
+    branches: [codex/thread-cost-estimates]
   workflow_dispatch:
 
 permissions:
@@ -30,7 +30,21 @@ jobs:
       - run: pnpm --filter @pi-desktop/desktop typecheck
       - run: pnpm lint
       - name: Gateway request regression tests
-        run: pnpm --filter @pi-desktop/agent-runtime exec vitest run src/session-affinity.test.ts src/compaction-request.test.ts src/runtime.test.ts
+        run: pnpm --filter @pi-desktop/agent-runtime exec vitest run src/session-affinity.test.ts src/compaction-request.test.ts src/runtime.test.ts src/model-capabilities.test.ts src/provider-binding.test.ts src/request-usage.test.ts
+      - name: Cost display unit tests
+        run: node --test apps/desktop/test/session-cost.test.mjs apps/desktop/test/context-usage.test.mjs apps/desktop/test/session-list-runtime.test.mjs
+      - name: Translation contracts
+        run: pnpm --filter @pi-desktop/i18n test
+      - name: Install isolated Electron test runtime
+        run: node node_modules/electron/install.js
+      - name: Provider pricing and chat cost UI regression
+        run: node scripts/e2e-provider-api-style.mjs
+      - name: Rust format check
+        run: cargo fmt --check
+      - name: Pricing persistence and session ledger tests
+        run: cargo test -p host-core --locked providers::
+      - name: Durable usage accounting regression
+        run: cargo test -p host-core --locked sessions::usage::
       - name: Capture real HTTP gateway requests
         run: node scripts/e2e-bedrock-gateway.mjs
       - name: Build portable executable
@@ -45,26 +59,28 @@ jobs:
       - name: Checksum
         shell: pwsh
         run: |
-          $file = 'apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0.exe'
+          $file = 'apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0-costs.1.exe'
           $hash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  PI-Desktop-Bedrock-Portable-0.21.0.exe" | Set-Content -LiteralPath "$file.sha256" -Encoding ascii
+          "$hash  PI-Desktop-Bedrock-Portable-0.21.0-costs.1.exe" | Set-Content -LiteralPath "$file.sha256" -Encoding ascii
       - uses: actions/upload-artifact@v7
         with:
           name: bedrock-portable-windows-x64
           if-no-files-found: error
           compression-level: 0
-          path: apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0.exe*
+          path: apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0-costs.1.exe*
       - name: Publish personal fork build
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: bedrock-portable-0.21.0
-          name: Pi Desktop 0.21.0 — Bedrock portable
+          tag_name: bedrock-portable-0.21.0-costs.1
+          name: Pi Desktop 0.21.0 — Bedrock portable with chat costs
           prerelease: true
           target_commitish: ${{ github.sha }}
           body: |
             Personal Windows x64 portable build. Download and run the EXE; no installer or local build is required.
 
+            Adds an estimated chat cost beside the context indicator, backed by the durable request ledger. Set per-model input, output, cache-read and cache-write prices in Settings → Agent → Models → Advanced → Override model prices (USD per million tokens). Turn off the override to return to automatic pricing. Rates apply to future requests; recorded history is preserved. Incomplete pricing is clearly marked.
+
             Custom OpenAI-compatible gateways omit prompt_cache_key by default, including context summaries. Session routing headers remain enabled. Published vendor endpoints and OpenCode retain their existing behavior.
 
             Gateways that require the key can opt back in with PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true before launching. This build is unsigned and has not been tested against the company's private LiteLLM server.
-          files: apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0.exe*
+          files: apps/desktop/release/PI-Desktop-Bedrock-Portable-0.21.0-costs.1.exe*

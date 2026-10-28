@@ -204,6 +204,103 @@ pub fn record_usage(db: &Database, session_id: &str, turn_id: &str, usage: &Valu
     Ok(true)
 }
 
+/// The billing ledger includes hidden retries and child requests. Transcript
+/// pagination, compaction, and row replay must not change the session's bill.
+pub(super) fn session_cost(db: &Database, session_id: &str) -> Result<Option<Value>> {
+    let mut statement = db.conn().prepare(
+        "SELECT usage_json, input_tokens, output_tokens FROM turns WHERE session_id = ?1 ORDER BY rowid",
+    )?;
+    let rows = statement.query_map(params![session_id], |row| {
+        Ok((
+            row.get::<_, Option<String>>(0)?,
+            row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+            row.get::<_, Option<i64>>(2)?.unwrap_or(0),
+        ))
+    })?;
+    let mut identified = std::collections::BTreeMap::<String, Value>::new();
+    let mut legacy = Vec::new();
+    for row in rows {
+        let (raw, input, output) = row?;
+        let parsed = raw
+            .as_deref()
+            .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+            .filter(Value::is_object);
+        let usage = match parsed {
+            Some(usage) => usage,
+            None if input > 0 || output > 0 || raw.is_some() => {
+                json!({"inputTokens": input.max(0), "outputTokens": output.max(0), "totalTokens": input.max(0).saturating_add(output.max(0)), "costStatus": "unknown"})
+            }
+            None => continue,
+        };
+        let records = operations(&usage);
+        if records.is_empty() {
+            legacy.push(usage);
+            continue;
+        }
+        if TOKENS
+            .iter()
+            .any(|key| count(&usage, key) > sum_counts(&records, key))
+        {
+            legacy.push(json!({"costStatus": "unknown"}));
+        }
+        for record in records {
+            let Some(id) = record
+                .get("operationId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                legacy.push(json!({"costStatus": "unknown"}));
+                continue;
+            };
+            let replace = identified.get(&id).is_none_or(|previous| {
+                count(&record, "totalTokens") > count(previous, "totalTokens")
+                    || (count(&record, "totalTokens") == count(previous, "totalTokens")
+                        && (!known_cost(previous)
+                            || (known_cost(&record)
+                                && record.get("costStatus").and_then(Value::as_str)
+                                    == Some("reported"))))
+            });
+            if replace {
+                identified.insert(id, record);
+            }
+        }
+    }
+    legacy.extend(identified.into_values());
+    Ok((!legacy.is_empty()).then(|| cost_summary_records(legacy)))
+}
+
+#[cfg(test)]
+fn cost_summary(usage: &Value) -> Value {
+    let mut records = operations(usage);
+    if records.is_empty() {
+        records.push(usage.clone());
+    } else if TOKENS
+        .iter()
+        .any(|key| count(usage, key) > sum_counts(&records, key))
+    {
+        // Legacy unattributed tokens coexist with newer identified requests.
+        records.push(json!({"costStatus": "unknown"}));
+    }
+    cost_summary_records(records)
+}
+
+fn cost_summary_records(records: Vec<Value>) -> Value {
+    let mut known = 0.0;
+    let mut unpriced = 0_u64;
+    for record in records {
+        let cost = record
+            .get("cost")
+            .and_then(|cost| cost.get("total"))
+            .and_then(Value::as_f64);
+        if known_cost(&record) && cost.is_some_and(|cost| (known + cost).is_finite()) {
+            known += cost.unwrap_or(0.0);
+        } else {
+            unpriced += 1;
+        }
+    }
+    json!({"knownCost": known, "unpricedRequests": unpriced})
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,6 +312,37 @@ mod tests {
             value["cost"] = json!({"input": 0.12, "output": 0.03, "cacheRead": 0, "cacheWrite": 0, "total": 0.15});
         }
         value
+    }
+
+    #[test]
+    fn cost_summary_keeps_known_cost_when_some_requests_are_unpriced() {
+        let merged = merge_usage(Some(&operation("paid", true)), &operation("missing", false));
+        assert_eq!(
+            cost_summary(&merged),
+            json!({"knownCost": 0.15, "unpricedRequests": 1})
+        );
+        let replayed = merge_usage(Some(&merged), &operation("paid", true));
+        assert_eq!(cost_summary(&replayed), cost_summary(&merged));
+        let legacy = json!({"inputTokens": 5, "outputTokens": 2, "totalTokens": 7});
+        let mixed = merge_usage(Some(&replayed), &legacy);
+        assert_eq!(
+            cost_summary(&mixed),
+            json!({"knownCost": 0.15, "unpricedRequests": 2})
+        );
+    }
+
+    #[test]
+    fn cost_summary_distinguishes_explicit_free_pricing_from_missing_prices() {
+        let mut free = operation("free", true);
+        free["cost"] = json!({"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0});
+        assert_eq!(
+            cost_summary(&free),
+            json!({"knownCost":0.0,"unpricedRequests":0})
+        );
+        assert_eq!(
+            cost_summary(&operation("unknown", false)),
+            json!({"knownCost":0.0,"unpricedRequests":1})
+        );
     }
 
     #[test]
@@ -281,6 +409,35 @@ mod tests {
         assert_eq!(stored["totalTokens"], 30);
         assert_eq!(stored["cost"]["total"], 0.3);
         assert_eq!(stored["operations"].as_array().unwrap().len(), 2);
+        let summary = session_cost(&db, &session.id).unwrap().unwrap();
+        assert_eq!(summary, json!({"knownCost": 0.3, "unpricedRequests": 0}));
+        let detail = crate::sessions::get_session_with_options(
+            &db,
+            &session.id,
+            crate::sessions::SessionReadOptions {
+                message_limit: Some(1),
+                ..Default::default()
+            },
+        );
+        // The direct summary remains independent of whichever transcript page is requested.
+        assert_eq!(detail.unwrap().unwrap().session_cost, Some(summary));
+        let second = super::super::begin_turn(&db, &session.id, None, None).unwrap();
+        record_usage(&db, &session.id, &second, &child).unwrap();
+        record_usage(&db, &session.id, &second, &operation("unpriced", false)).unwrap();
+        assert_eq!(
+            session_cost(&db, &session.id).unwrap().unwrap(),
+            json!({"knownCost":0.3,"unpricedRequests":1})
+        );
+        db.conn()
+            .execute(
+                "UPDATE turns SET usage_json = 'invalid-json' WHERE id = ?1",
+                params![second],
+            )
+            .unwrap();
+        assert_eq!(
+            session_cost(&db, &session.id).unwrap().unwrap(),
+            json!({"knownCost":0.3,"unpricedRequests":1})
+        );
         drop(db);
         std::fs::remove_dir_all(dir).unwrap();
     }

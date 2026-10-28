@@ -3899,3 +3899,10 @@
     opacity: 0.7;
   }
 }
+
+
+.session-cost-value {
+  color: var(--ds-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

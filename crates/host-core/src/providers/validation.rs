@@ -176,8 +176,25 @@ pub(crate) fn normalize_thinking_levels(levels: &[String]) -> Vec<String> {
     out
 }
 
-pub(crate) fn validate_model_aliases(bindings: &[ModelBinding]) -> Result<()> {
+pub(crate) fn validate_model_bindings(bindings: &[ModelBinding]) -> Result<()> {
     for binding in bindings {
+        if let Some(rates) = &binding.cost_override {
+            if [
+                &rates.input,
+                &rates.output,
+                &rates.cache_read,
+                &rates.cache_write,
+            ]
+            .iter()
+            .any(|rate| {
+                !rate
+                    .as_f64()
+                    .is_some_and(|rate| rate.is_finite() && rate >= 0.0)
+            }) {
+                bail!("INVALID_MODEL_PRICING: prices must be finite nonnegative USD per million tokens");
+            }
+        }
+
         if let Some(alias) = binding.alias.as_deref() {
             if alias.trim().chars().count() > MAX_MODEL_ALIAS_CHARS {
                 bail!(

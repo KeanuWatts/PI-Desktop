@@ -102,9 +102,18 @@ export function modelConfigWithBinding(
         | "supportsImages"
         | "supportsDocuments"
         | "nativeWebSearch"
+        | "costOverride"
       >
     | null,
 ): ModelConfig {
+  if (binding?.costOverride) {
+    const { input, output, cacheRead, cacheWrite } = binding.costOverride;
+    const rates = { input, output, cacheRead, cacheWrite };
+    if (Object.values(rates).every(rate => Number.isFinite(rate) && rate >= 0)) {
+      // Explicit flat rates replace native tiers as well as their base prices.
+      model = { ...model, cost: { ...rates }, nativeCost: { ...rates } };
+    }
+  }
   // A live-only account model may already carry explicit sibling capabilities.
   // Preserve those until a stored user binding overrides them; only a truly
   // unclassified generic row needs the unrestricted defaults below.

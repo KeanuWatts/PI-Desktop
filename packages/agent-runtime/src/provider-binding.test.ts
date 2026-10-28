@@ -1,3 +1,6 @@
+import { calculateCost } from "@earendil-works/pi-ai";
+import { usageFromPi } from "./agent-messages.js";
+import { nativeCostStatus } from "./request-usage.js";
 import { describe, expect, it, vi } from "vitest";
 import { DEEPSEEK_REASONING_REPLAY_PLACEHOLDER } from "@pi-desktop/shared";
 import type { ModelAuth } from "@earendil-works/pi-ai";
@@ -1805,4 +1808,20 @@ describe("session affinity for the adapters' anonymous endpoints (#1634)", () =>
     expect(headers?.get("x-client-request-id")).toBe("session-9");
     expect(headers?.get("x-session-affinity")).toBe("session-9");
   });
+});
+
+
+it("prices an overridden gateway request with Pi's real token calculator", () => {
+  const rates = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
+  const config = modelConfigWithBinding(genericModelConfig("gateway"), {
+    contextWindow: 128000, maxTokens: 8192, thinkingLevels: [], costOverride: rates,
+  });
+  const model = buildProviderModel({ ...keyedProvider, modelConfig: config });
+  const usage = { input: 1000000, output: 100000, cacheRead: 200000, cacheWrite: 10000,
+    totalTokens: 1310000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+  calculateCost(model, usage);
+  expect(usage.cost.total).toBeCloseTo(4.5975);
+  const reported = usageFromPi(usage, { costStatus: nativeCostStatus(config.nativeCost) });
+  expect(reported?.costStatus).toBe("estimated");
+  expect(reported?.cost?.total).toBeCloseTo(4.5975);
 });

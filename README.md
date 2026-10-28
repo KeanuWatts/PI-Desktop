@@ -1,5 +1,13 @@
 # Personal Bedrock-compatible portable build
 
+The portable release also shows an estimated chat cost beside the context
+indicator. To set your own prices, open Settings → Agent → Models, expand the
+model’s Advanced section, and enable **Override model prices**. Enter USD per
+million tokens for input/output/cache read/cache write, then save. Turn the
+override off to restore automatic pricing. Changes apply to future requests;
+unknown prices are shown as unavailable or incomplete, never free.
+
+
 This fork omits `prompt_cache_key` for custom OpenAI-compatible gateways by
 default, avoiding LiteLLM/Bedrock unsupported-parameter errors without server
 changes. Download the Windows x64 portable EXE from this fork’s Releases;
