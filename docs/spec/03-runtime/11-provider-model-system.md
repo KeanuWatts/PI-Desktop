@@ -818,3 +818,15 @@ exact origins and paths, never display names or model substrings.
 The resolved adapter remains authoritative for search extraction and replay.
 Unknown connection formats are described as not integrated by this app rather
 than unsupported by the vendor. See the provider configuration specification.
+
+## Personal Bedrock fork: gateway prompt cache keys
+
+Custom Chat Completions and Responses gateways omit `prompt_cache_key` by
+default, including keys provided by adapters, extensions, and compaction.
+Routing headers remain enabled. This avoids LiteLLM UnsupportedParamsError
+when its Bedrock model rejects the OpenAI parameter. Published vendor hosts
+and the dedicated OpenCode path retain their existing behavior.
+Set `PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true` before launching to restore
+upstream gateway cache-key behavior (needed by some Codex relays). No local
+configuration edit is needed for this fork to work with Bedrock. This fork
+policy supersedes the gateway body-key behavior described above.

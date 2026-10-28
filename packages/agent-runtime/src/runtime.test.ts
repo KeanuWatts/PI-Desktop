@@ -12576,7 +12576,7 @@ describe("DesktopAgentRuntime summary conversation key", () => {
       await runtime.compactManually();
 
       expect(requests).toHaveLength(1);
-      expect(requests[0]?.prompt_cache_key).toBe("session-1");
+      expect(requests[0]).not.toHaveProperty("prompt_cache_key");
       const logged = stderr.mock.calls.map(([chunk]) => String(chunk)).join("");
       expect(logged).not.toContain("compaction summary failed");
     } finally {

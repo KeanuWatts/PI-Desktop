@@ -19167,3 +19167,15 @@ their separate platform acceptance.
   event/result agreement, batch rejection and delegate restoration.
 - **Status**: Automated offline; native UI clicking and live providers are
   outside this fixture's coverage.
+
+### Personal fork: Bedrock gateway cache-key regression
+
+Capture Chat Completions and Responses requests at a local gateway stand-in,
+including context summaries and an extension-supplied key. Without
+`PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY`, assert that the outgoing JSON contains
+no `prompt_cache_key` while session-affinity headers remain present. Repeat
+with the variable set to `true` and assert upstream key behavior is restored.
+Published provider and OpenCode requests must retain existing behavior.
+This supersedes the body-key expectations of the upstream custom endpoint
+scenario for this personal fork. The real company LiteLLM endpoint remains
+a manual acceptance check because its credentials are unavailable.

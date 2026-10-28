@@ -1,6 +1,9 @@
 /**
  * Session identity for endpoints the adapters leave anonymous.
  *
+ * Personal fork override: custom OpenAI gateways omit the prompt cache body
+ * key unless PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY=true; routing headers remain.
+ *
  * pi-ai stamps a conversation id by itself only where a vendor documented one:
  * the Responses adapters send it on every request, and the Completions and
  * Anthropic adapters send it only while `compat.sendSessionAffinityHeaders` is
@@ -119,6 +122,18 @@ export function withSessionPromptCacheKey(input: {
   enabled: boolean;
 }): unknown {
   const { payload, api, sessionId, enabled } = input;
+  // Personal fork: Bedrock behind LiteLLM rejects this OpenAI-only parameter.
+  // Keep session routing headers, but omit the body key for custom gateways.
+  // Opt in only for gateways that require it (for example, Codex relays).
+  if (enabled && process.env.PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY !== "true" &&
+      (api === "openai-completions" || api === "openai-responses")) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+    const body = payload as Record<string, unknown>;
+    if (!Object.hasOwn(body, "prompt_cache_key")) return payload;
+    const next = { ...body };
+    delete next.prompt_cache_key;
+    return next;
+  }
   if (!enabled || !SESSION_AFFINITY_BODY_APIS.has(api)) return payload;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
   const body = payload as Record<string, unknown>;
@@ -168,7 +183,10 @@ export function withSessionAffinityOptions(
     };
   }
 
-  if (!SESSION_AFFINITY_BODY_APIS.has(input.api)) return nextOptions;
+  if (!SESSION_AFFINITY_BODY_APIS.has(input.api) &&
+      (input.api !== "openai-responses" || process.env.PI_DESKTOP_GATEWAY_PROMPT_CACHE_KEY === "true")) {
+    return nextOptions;
+  }
   const previous = nextOptions.onPayload;
   return {
     ...nextOptions,
